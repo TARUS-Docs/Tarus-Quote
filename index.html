@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tarus Quote Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #000;
+    margin: 0;
+    padding: 0;
+    background-color: #525659;
+  }
+  
+  /* --- WEB APP CONTROL BAR --- */
+  .control-panel {
+    background: #323639;
+    color: white;
+    padding: 15px 20px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    border-bottom: 1px solid #111;
+  }
+  .control-btn {
+    background-color: #0044cc;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-weight: bold;
+    border-radius: 4px;
+    margin: 0 5px;
+  }
+  .control-btn:hover { background-color: #003399; }
+  .control-btn.clear { background-color: #dc3545; }
+  .control-btn.clear:hover { background-color: #c82333; }
+  .control-btn.save { background-color: #17a2b8; }
+  .control-btn.save:hover { background-color: #138496; }
+  .control-btn.load { background-color: #ffc107; color: #000; }
+  .control-btn.load:hover { background-color: #e0a800; }
+  .control-btn.export { background-color: #28a745; }
+  .control-btn.export:hover { background-color: #218838; }
+
+  /* App Wrapper centers the document on the screen */
+  #app-wrapper {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  /* THE DOCUMENT CONTAINER */
+  #quote-document {
+    width: 800px;
+    background-color: #fff;
+    padding: 40px; 
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    position: relative;
+  }
+
+  /* Universal PDF Protections */
+  .avoid-break { page-break-inside: avoid !important; }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  td { vertical-align: top; word-wrap: break-word; }
+  .bold { font-weight: bold; }
+  
+  /* STRICT ALIGNMENT CLASSES */
+  .text-left { text-align: left !important; }
+  .text-center { text-align: center !important; }
+  .text-right { text-align: right !important; }
+  
+  /* Header Section */
+  .quote-title { font-size: 22px; font-weight: bold; margin-bottom: 5px; }
+  .quote-number { border: 1px solid #000; padding: 5px 30px; font-size: 16px; font-weight: bold; display: inline-block; min-width: 100px; }
+  
+  /* Address Section */
+  .address-box { border: 1px solid #000; padding: 8px 10px; min-height: 90px; width: 100%; }
+  .ref-text { margin-top: 15px; }
+
+  /* Meta Details Table */
+  .meta-table { table-layout: fixed; width: 100%; margin-bottom: 5px; }
+  .meta-table th { font-weight: bold; text-align: center; padding-bottom: 5px; font-size: 11px; white-space: normal; }
+  .meta-table td { text-align: center; padding: 0 2px; overflow: hidden; }
+
+  /* --- RESTORED HTML TABLE LAYOUT --- */
+  .lines-table { table-layout: fixed; width: 100%; margin-top: 10px; }
+  .lines-table th { border-bottom: 2px solid #000; padding: 6px 4px; font-weight: bold; } 
+  .lines-table td { padding: 6px 4px; border-bottom: 1px solid #eee; vertical-align: middle; }
+  .lines-table tr { page-break-inside: avoid !important; }
+
+  /* Exact Column Widths Totaling exactly 100% */
+  .col-sort  { width: 6%; }
+  .col-line  { width: 5%; }
+  .col-item  { width: 15%; }
+  .col-desc  { width: 38%; } 
+  .col-qty   { width: 8%; }
+  .col-um    { width: 6%; }
+  .col-price { width: 11%; }
+  .col-total { width: 11%; }
+
+  /* --- FADED PLACEHOLDER INSTRUCTIONS --- */
+  [contenteditable="true"]:empty:before {
+    content: attr(data-placeholder);
+    color: #999;
+    font-style: italic;
+    pointer-events: none;
+    display: inline-block;
+  }
+  [contenteditable="true"]:empty { min-height: 1.2em; min-width: 30px; }
+  .address-box:empty { display: block; min-height: 90px; }
+
+  /* Interactive UI Adjustments */
+  td[contenteditable="true"]:hover, div[contenteditable="true"]:hover { background-color: #f0f8ff; cursor: text; outline: 1px dashed #ccc; }
+  [contenteditable="false"] { cursor: default; }
+  
+  select.editable-select, input.date-input {
+    font-family: Arial, sans-serif; font-size: 12px; border: 1px solid transparent;
+    padding: 2px; background-color: transparent; cursor: pointer; color: #000;
+    width: 100%; min-width: 0; text-overflow: ellipsis;
+  }
+  select.editable-select:hover, input.date-input:hover { border: 1px dashed #ccc; background-color: #f0f8ff; }
+  
+  .action-btn { background: #e0e0e0; border: 1px solid #ccc; cursor: pointer; padding: 2px 5px; font-size: 10px; margin-right: 2px; border-radius: 3px; }
+  .action-btn:hover { background: #d0d0d0; }
+  .action-btn.del { background: #ffe0e0; color: #a00; border-color: #ffcccc; }
+  .action-btn.del:hover { background: #ffc0c0; }
+
+  /* Unified Footer Notes */
+  .footer-notes { margin-top: 30px; padding: 5px; border: 1px dashed transparent; }
+  .footer-notes:hover { border-color: #ccc; background-color: #f9f9f9; }
+  .footer-notes div { margin: 4px 0; }
+  
+  /* Logo */
+  .logo-placeholder {
+    height: 32px; width: auto; margin-bottom: 5px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+  <!-- Top Web App Control Bar -->
+  <div class="control-panel no-print" id="control-bar">
+    <button class="control-btn" onclick="addLineItem()">+ Add Line</button>
+    <button class="control-btn clear" onclick="clearForm()">&#8634; Clear Form</button>
+    <button class="control-btn save" onclick="saveDraft()">&#128190; Save Draft</button>
+    <button class="control-btn load" onclick="loadDraft()">&#128193; Load Draft</button>
+    <button class="control-btn export" onclick="exportToPDF()" id="exportBtn">&#11123; Download PDF</button>
+  </div>
+
+  <div id="app-wrapper">
+    <div id="quote-document">
+      
+      <div class="avoid-break">
+        <!-- Header -->
+        <table>
+          <tr>
+            <td style="width: 33%;">
+              <!-- GITHUB DEFAULT LOGO -->
+              <input type="file" id="logo-upload" class="no-print" accept="image/png, image/jpeg" style="display: none;">
+              <img src="Tarus Quote Logo.jpg" id="logo-img" alt="TARUS Logo" class="logo-placeholder" onerror="this.src=''; this.alt='Click to upload logo if missing'">
+              
+              <div id="tarus-address" contenteditable="true" data-placeholder="Enter Company Address...">38100 Commerce Drive<br>Sterling Heights MI 48312<br>+1 586-977-1400<br>+1 586-977-3294<br>tarus.com</div>
+            </td>
+            <td style="width: 34%;" class="text-center">
+              <div class="quote-title">Quotation</div>
+              <div class="quote-number" contenteditable="true" data-placeholder="Enter Quote #">5822</div>
+            </td>
+            <td style="width: 33%;" class="text-right">
+              <div class="bold" id="rep-name" contenteditable="true" data-placeholder="Enter Sales Rep Name...">Chris Morton</div>
+              <div id="rep-contact" contenteditable="true" data-placeholder="Enter Rep Contact Info...">+1 586-977-1400<br>+1 586-977-0741<br>&#9993; sales@tarus.com</div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Addresses -->
+        <table style="margin-bottom: 5px;">
+          <tr>
+            <td style="width: 48%;">
+              <div class="bold">TO</div>
+              <div id="to-address" class="address-box" contenteditable="true" data-placeholder="Enter Customer Name & Address here...">Honda-Development & Manufacturing Ohio Center<br>21001 OH-739<br>Raymond OH 43067<br>USA<br><br>+1 937-644-0439</div>
+              <div id="ref-text" class="ref-text" contenteditable="true" data-placeholder="Enter Ref/SN details here...">Ref: S/N: TPLCMTLH3491</div>
+            </td>
+            <td style="width: 4%;"></td>
+            <td style="width: 48%;">
+              <div class="bold">SHIP TO</div>
+              <div id="ship-to-address" class="address-box" contenteditable="true" data-placeholder="Enter Shipping Address here...">Honda-Development & Manufacturing Ohio Center<br>10820 OH-347<br>Building 120<br>East Liberty OH 43319<br>USA</div>
+            </td>
+          </tr>
+        </table>
+
+        <br>
+
+        <!-- Meta Details -->
+        <table class="meta-table">
+          <colgroup>
+            <col style="width: 12%;">
+            <col style="width: 16%;">
+            <col style="width: 16%;">
+            <col style="width: 10%;">
+            <col style="width: 18%;">
+            <col style="width: 16%;">
+            <col style="width: 12%;">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="text-center">Date</th>
+              <th class="text-center">Inquiry Reference</th>
+              <th class="text-center">Delivery Promise</th>
+              <th class="text-center">FOB</th>
+              <th class="text-center">Ship Via</th>
+              <th class="text-center">Terms</th>
+              <th class="text-center">Expiration</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-center"><input type="date" class="date-input" id="meta-date"></td>
+              <td id="inquiry-ref" class="text-center" contenteditable="true" data-placeholder="Ref...">New Tooling</td>
+              <td id="delivery-promise" class="text-center" contenteditable="true" data-placeholder="Time...">5-8 Business Weeks ARO</td>
+              <td id="fob-point" class="text-center" contenteditable="true" data-placeholder="FOB...">Tarus</td>
+              <td class="text-center">
+                <select class="editable-select" id="ship-via">
+                  <option>BEST WAY</option>
+                  <option>CCX CONWAY</option>
+                  <option>COMMON CARRIER</option>
+                  <option>DHL</option>
+                  <option>FEDEX</option>
+                  <option>OUR TRUCK</option>
+                  <option>TARUS SERVICE</option>
+                  <option>UPS 2ND (BLUE)</option>
+                  <option>UPS 3D (ORANGE)</option>
+                  <option>UPS COLLECT-RED</option>
+                  <option>UPS EARLY AM</option>
+                  <option selected>UPS GROUND</option>
+                  <option>UPS Ground TP Acct 417092</option>
+                  <option>UPS RED</option>
+                  <option>UPS SATURDAY</option>
+                  <option>VENDOR DELY</option>
+                  <option>WILL CALL</option>
+                  <option>YELLOW FREIGHT</option>
+                </select>
+              </td>
+              <td class="text-center">
+                <select class="editable-select" id="terms">
+                  <option>.5%10,N30</option>
+                  <option>1% 10, N30</option>
+                  <option>1% 15, N30</option>
+                  <option>10 Net 10</option>
+                  <option>10% deposit, 90% upon ship</option>
+                  <option>100% Prepayment (Custom Order)</option>
+                  <option>100% Prepayment (Prior to Shipping)</option>
+                  <option>2% 10, N30</option>
+                  <option>2% 15, N30</option>
+                  <option>20% down payment 80% Net 30</option>
+                  <option>30% Down - 60% Prior to Ship - 10% After Install</option>
+                  <option>30% due upon order - 70% due Net 30</option>
+                  <option>30% due upon order - 70% due upon completion</option>
+                  <option>50% deposit, 40% upon ship, 10% upon install</option>
+                  <option>50% PO & 50% before delivery</option>
+                  <option>50% PO & 50% N30</option>
+                  <option>60% deposit, 30% upon ship, 10% upon receipt</option>
+                  <option>C.O.D.</option>
+                  <option>Consign</option>
+                  <option>Cred Card</option>
+                  <option>Due Recpt</option>
+                  <option>Mastercard</option>
+                  <option>Net 10</option>
+                  <option>Net 15</option>
+                  <option>Net 20</option>
+                  <option selected>Net 30</option>
+                  <option>Net 45</option>
+                  <option>Net 60</option>
+                  <option>Net 75</option>
+                  <option>Net 90</option>
+                  <option>No Charge</option>
+                  <option>Other</option>
+                  <option>Warranty</option>
+                  <option>Wire Trans</option>
+                </select>
+              </td>
+              <td class="text-center"><input type="date" class="date-input" id="meta-exp"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div> 
+
+      <!-- RESTORED HTML TABLE FOR LINE ITEMS -->
+      <table class="lines-table">
+        <thead>
+          <tr>
+            <th class="col-sort text-center no-print">Sort</th>
+            <th class="col-line text-center">Line</th>
+            <th class="col-item text-left">Item</th>
+            <th class="col-desc text-left">Description</th>
+            <th class="col-qty text-center">Quantity</th>
+            <th class="col-um text-center">UM</th>
+            <th class="col-price text-right">Unit Price</th>
+            <th class="col-total text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody id="line-items">
+          <!-- Initial Demo Items -->
+          <tr>
+            <td class="col-sort text-center no-print">
+              <button class="action-btn" onclick="moveUp(this)">↑</button><button class="action-btn" onclick="moveDown(this)">↓</button><button class="action-btn del" onclick="deleteRow(this)">✗</button>
+            </td>
+            <td class="col-line line-num text-center" contenteditable="true">1</td>
+            <td class="col-item text-left" contenteditable="true" data-placeholder="Part #">S57103</td>
+            <td class="col-desc text-left" contenteditable="true" data-placeholder="Enter Description...">5MM DIA. X 160MM (MED) LENGTH X 5MM SHANK - CARBIDE DOUBLE FLUTE BALL<br><i>(Price reflects 30% Lot Discount &mdash; Reg. $286.00 ea)</i></td>
+            <td class="col-qty qty text-center" contenteditable="true">20</td>
+            <td class="col-um text-center" contenteditable="true" data-placeholder="UM">EA</td>
+            <td class="col-price price text-right" contenteditable="true" data-placeholder="Price">$200.20</td>
+            <td class="col-total line-total text-right">$4,004.00</td>
+          </tr>
+          <tr>
+            <td class="col-sort text-center no-print">
+              <button class="action-btn" onclick="moveUp(this)">↑</button><button class="action-btn" onclick="moveDown(this)">↓</button><button class="action-btn del" onclick="deleteRow(this)">✗</button>
+            </td>
+            <td class="col-line line-num text-center" contenteditable="true">2</td>
+            <td class="col-item text-left" contenteditable="true" data-placeholder="Part #">TPI2209</td>
+            <td class="col-desc text-left" contenteditable="true" data-placeholder="Enter Description...">10MM DIA. X 205MM (LONG) LENGTH - POINTER</td>
+            <td class="col-qty qty text-center" contenteditable="true">8</td>
+            <td class="col-um text-center" contenteditable="true" data-placeholder="UM">EA</td>
+            <td class="col-price price text-right" contenteditable="true" data-placeholder="Price">$260.00</td>
+            <td class="col-total line-total text-right">$2,080.00</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="avoid-break" style="display: flex; justify-content: flex-end; align-items: center; margin-top: 15px; padding-right: 5px;">
+        <div style="font-weight: bold; font-size: 14px; margin-right: 30px;">Total USD</div>
+        <div style="font-weight: bold; font-size: 14px; width: 100px; text-align: right;" id="grand-total">$6,084.00</div>
+      </div>
+
+      <!-- UNIFIED FOOTER -->
+      <div class="avoid-break">
+        <div class="footer-notes" contenteditable="true" id="footer-notes" data-placeholder="Enter terms, conditions, and notes here...">
+          <div>Please send your Purchase Order to service@tarus.com.</div>
+          <div>* Delivery times are an estimation only and cannot be guaranteed.</div>
+          <div>** Shipping will be prepaid and added to the invoice.</div>
+          <div>*** If paying with Credit Card an additional 3.5% will be added to the invoice.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // --- INITIALIZATION ---
+    document.addEventListener("DOMContentLoaded", () => {
+        const today = new Date().toISOString().split('T')[0];
+        document.querySelectorAll('input[type="date"]').forEach(el => {
+            if(!el.value) el.value = today;
+        });
+    });
+
+    // --- LOGO MANAGER ---
+    const logoImg = document.getElementById('logo-img');
+    const logoUpload = document.getElementById('logo-upload');
+    const savedLogo = localStorage.getItem('tarusQuoteLogoBase64');
+    if (savedLogo && savedLogo.startsWith('data:image')) {
+      logoImg.src = savedLogo;
+    }
+    logoImg.addEventListener('click', () => { logoUpload.click(); });
+    logoUpload.addEventListener('change', function() {
+      const file = this.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          logoImg.src = e.target.result;
+          localStorage.setItem('tarusQuoteLogoBase64', e.target.result);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // --- APP TOOLS (Clear, Save, Load) ---
+    function clearForm() {
+      if(!confirm("This will wipe customer info and items to start a blank quote. Continue?")) return;
+      document.querySelector('.quote-number').innerText = '';
+      document.getElementById('to-address').innerText = '';
+      document.getElementById('ship-to-address').innerText = '';
+      document.getElementById('ref-text').innerText = '';
+      document.getElementById('inquiry-ref').innerText = '';
+      document.getElementById('delivery-promise').innerText = '';
+      document.getElementById('fob-point').innerText = '';
+      document.getElementById('line-items').innerHTML = '';
+      document.getElementById('grand-total').innerText = '$0.00';
+      addLineItem();
+    }
+
+    function saveDraft() {
+      const data = {
+        quoteNum: document.querySelector('.quote-number').innerText,
+        toAddress: document.getElementById('to-address').innerHTML,
+        shipToAddress: document.getElementById('ship-to-address').innerHTML,
+        refText: document.getElementById('ref-text').innerHTML,
+        inquiryRef: document.getElementById('inquiry-ref').innerText,
+        deliveryPromise: document.getElementById('delivery-promise').innerText,
+        fobPoint: document.getElementById('fob-point').innerText,
+        footerNotes: document.getElementById('footer-notes').innerHTML,
+        lineItems: document.getElementById('line-items').innerHTML,
+        date: document.getElementById('meta-date').value,
+        exp: document.getElementById('meta-exp').value,
+        shipVia: document.getElementById('ship-via').value,
+        terms: document.getElementById('terms').value
+      };
+      localStorage.setItem('TarusQuote_Save', JSON.stringify(data));
+      alert("Draft saved to your browser!");
+    }
+
+    function loadDraft() {
+      const saved = localStorage.getItem('TarusQuote_Save');
+      if(!saved) { alert("No saved draft found."); return; }
+      const data = JSON.parse(saved);
+      document.querySelector('.quote-number').innerText = data.quoteNum || '';
+      document.getElementById('to-address').innerHTML = data.toAddress || '';
+      document.getElementById('ship-to-address').innerHTML = data.shipToAddress || '';
+      document.getElementById('ref-text').innerHTML = data.refText || '';
+      document.getElementById('inquiry-ref').innerText = data.inquiryRef || '';
+      document.getElementById('delivery-promise').innerText = data.deliveryPromise || '';
+      document.getElementById('fob-point').innerText = data.fobPoint || '';
+      document.getElementById('footer-notes').innerHTML = data.footerNotes || '';
+      document.getElementById('line-items').innerHTML = data.lineItems || '';
+      if(data.date) document.getElementById('meta-date').value = data.date;
+      if(data.exp) document.getElementById('meta-exp').value = data.exp;
+      if(data.shipVia) document.getElementById('ship-via').value = data.shipVia;
+      if(data.terms) document.getElementById('terms').value = data.terms;
+      calculateTotals();
+    }
+
+    // --- TABLE MATH ---
+    function calculateTotals() {
+      let grandTotal = 0;
+      const rows = document.querySelectorAll('#line-items tr');
+      rows.forEach(row => {
+        const qtyCell = row.querySelector('.qty');
+        const priceCell = row.querySelector('.price');
+        const totalCell = row.querySelector('.line-total');
+        if (qtyCell && priceCell && totalCell) {
+          const qty = parseFloat(qtyCell.innerText.replace(/[^0-9.-]+/g, "")) || 0;
+          const price = parseFloat(priceCell.innerText.replace(/[^0-9.-]+/g, "")) || 0;
+          const lineTotal = qty * price;
+          totalCell.innerText = '$' + lineTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+          grandTotal += lineTotal;
+        }
+      });
+      document.getElementById('grand-total').innerText = '$' + grandTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    document.getElementById('line-items').addEventListener('input', calculateTotals);
+
+    function addLineItem() {
+      const tbody = document.getElementById('line-items');
+      const nextLineNum = tbody.children.length + 1;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="col-sort text-center no-print">
+          <button class="action-btn" onclick="moveUp(this)">↑</button><button class="action-btn" onclick="moveDown(this)">↓</button><button class="action-btn del" onclick="deleteRow(this)">✗</button>
+        </td>
+        <td class="col-line line-num text-center" contenteditable="true">${nextLineNum}</td>
+        <td class="col-item text-left" contenteditable="true" data-placeholder="Part #"></td>
+        <td class="col-desc text-left" contenteditable="true" data-placeholder="Enter Description..."></td>
+        <td class="col-qty qty text-center" contenteditable="true">1</td>
+        <td class="col-um text-center" contenteditable="true">EA</td>
+        <td class="col-price price text-right" contenteditable="true" data-placeholder="Price">$0.00</td>
+        <td class="col-total line-total text-right">$0.00</td>
+      `;
+      tbody.appendChild(tr);
+      renumberRows();
+      calculateTotals();
+    }
+
+    function moveUp(btn) {
+      const row = btn.closest('tr');
+      if (row.previousElementSibling) { row.parentNode.insertBefore(row, row.previousElementSibling); renumberRows(); }
+    }
+    function moveDown(btn) {
+      const row = btn.closest('tr');
+      if (row.nextElementSibling) { row.parentNode.insertBefore(row.nextElementSibling, row); renumberRows(); }
+    }
+    function deleteRow(btn) {
+      btn.closest('tr').remove();
+      renumberRows();
+      calculateTotals();
+    }
+    function renumberRows() {
+      document.querySelectorAll('#line-items tr').forEach((row, index) => {
+        row.querySelector('.line-num').innerText = index + 1;
+      });
+    }
+
+    // --- ABSOLUTE ZERO CUTOFF PDF ENGINE ---
+    function exportToPDF() {
+      const btn = document.getElementById('exportBtn');
+      const element = document.getElementById('quote-document');
+
+      btn.innerText = "Generating PDF...";
+      
+      const quoteNum = document.querySelector('.quote-number').innerText.trim() || 'Quote';
+      const filename = 'Tarus_Quote_' + quoteNum + '.pdf';
+      const repName = document.getElementById('rep-name').innerText;
+      const now = new Date();
+      const dateString = now.toLocaleDateString('en-US') + ' ' + now.toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'});
+
+      const opt = {
+        margin:       [0.4, 0.4, 0.8, 0.4], 
+        filename:     filename,
+        image:        { type: 'jpeg', quality: 1.0 },
+        html2canvas:  { 
+            scale: 2, 
+            useCORS: true,
+            windowWidth: 800,
+            width: 800,
+            onclone: function (clonedDoc) {
+                const printArea = clonedDoc.getElementById('quote-document');
+                
+                // 1. Force the engine to isolate exactly an 800px box at coordinate 0,0
+                clonedDoc.body.style.margin = '0';
+                clonedDoc.body.style.padding = '0';
+                printArea.style.margin = '0';
+                printArea.style.position = 'absolute';
+                printArea.style.top = '0';
+                printArea.style.left = '0';
+                printArea.style.width = '800px';
+                printArea.style.maxWidth = '800px';
+                printArea.style.boxShadow = 'none';
+
+                // 2. Hide Placeholders and empty boxes permanently from PDF
+                clonedDoc.querySelectorAll('[contenteditable="true"]').forEach(el => {
+                    el.removeAttribute('data-placeholder');
+                    if(el.textContent.trim() === '') { el.innerHTML = ''; }
+                });
+
+                // 3. Strip UI buttons and fix column width
+                clonedDoc.querySelectorAll('.no-print').forEach(el => el.style.display = 'none');
+                clonedDoc.querySelectorAll('.col-sort').forEach(el => el.style.display = 'none');
+                clonedDoc.querySelectorAll('.col-desc').forEach(el => el.style.width = '44%'); 
+
+                // 4. Safely swap interactive Dropdowns to Text
+                clonedDoc.querySelectorAll('select.editable-select').forEach(sel => {
+                    const span = clonedDoc.createElement('span');
+                    span.innerText = sel.options[sel.selectedIndex].text;
+                    span.style.fontFamily = 'Arial, sans-serif';
+                    span.style.fontSize = '12px';
+                    sel.parentNode.insertBefore(span, sel);
+                    sel.remove();
+                });
+
+                // 5. Safely swap Date Pickers to Text
+                clonedDoc.querySelectorAll('input.date-input').forEach(inp => {
+                    const span = clonedDoc.createElement('span');
+                    let displayDate = inp.value;
+                    if(displayDate.includes('-')) {
+                        displayDate = `${displayDate.split('-')[1]}/${displayDate.split('-')[2]}/${displayDate.split('-')[0]}`; 
+                    }
+                    span.innerText = displayDate;
+                    span.style.fontFamily = 'Arial, sans-serif';
+                    span.style.fontSize = '12px';
+                    inp.parentNode.insertBefore(span, inp);
+                    inp.remove();
+                });
+            }
+        }, 
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'], avoid: ['tr', '.avoid-break'] }
+      };
+
+      html2pdf().set(opt).from(element).toPdf().get('pdf').then(function (pdf) {
+        var totalPages = pdf.internal.getNumberOfPages();
+        for (var i = 1; i <= totalPages; i++) {
+          pdf.setPage(i);
+          pdf.setFontSize(8);
+          pdf.setTextColor(0, 0, 0);
+          pdf.text('Page ' + i + ' of ' + totalPages, 0.4, pdf.internal.pageSize.getHeight() - 0.4);
+          pdf.text(dateString, 0.4, pdf.internal.pageSize.getHeight() - 0.25);
+          pdf.text('Sales Representative: ' + repName, pdf.internal.pageSize.getWidth() - 2.5, pdf.internal.pageSize.getHeight() - 0.4);
+        }
+      }).save().then(() => {
+        btn.innerHTML = "&#11123; Download PDF";
+      });
+    }
+  </script>
+</body>
+</html>
