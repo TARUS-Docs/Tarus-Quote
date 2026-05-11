@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tarus Quote Generator</title>
+<!-- PDF Rendering & Parsing Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script>
+    // Required to configure the PDF.js worker for local browser parsing
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #000;
+    margin: 0;
+    padding: 0;
+    background-color: #525659;
+  }
+  
+  /* --- WEB APP CONTROL BAR --- */
+  .control-panel {
+    background: #323639;
+    color: white;
+    padding: 15px 20px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    border-bottom: 1px solid #111;
+  }
+  .control-btn {
+    background-color: #0044cc;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-weight: bold;
+    border-radius: 4px;
+    margin: 0 5px;
+  }
+  .control-btn:hover { background-color: #003399; }
+  
+  /* Feature Tool Colors */
+  .control-btn.import { background-color: #6f42c1; }
+  .control-btn.import:hover { background-color: #59339d; }
+  .control-btn.clear { background-color: #dc3545; }
+  .control-btn.clear:hover { background-color: #c82333; }
+  .control-btn.save { background-color: #17a2b8; }
+  .control-btn.save:hover { background-color: #138496; }
+  .control-btn.load { background-color: #ffc107; color: #000; }
+  .control-btn.load:hover { background-color: #e0a800; }
+  .control-btn.export { background-color: #28a745; }
+  .control-btn.export:hover { background-color: #218838; }
+  .control-btn.help { background-color: #343a40; }
+  .control-btn.help:hover { background-color: #23272b; }
+  .control-btn.undo-redo { background-color: #6c757d; }
+  .control-btn.undo-redo:hover { background-color: #5a6268; }
+
+  /* --- HELP MODAL --- */
+  #help-modal {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8); z-index: 2000;
+    display: none; justify-content: center; align-items: center;
+  }
+  .help-content {
+    background: #fff; padding: 30px; border-radius: 8px;
+    max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto;
+    position: relative; color: #333; font-family: Arial, sans-serif;
+    text-align: left; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  }
+  .help-content h2 { margin-top: 0; color: #0044cc; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+  .help-content h3 { color: #333; margin-bottom: 5px; font-size: 15px; }
+  .help-content ul { margin-top: 5px; padding-left: 20px; line-height: 1.5; }
+  .help-content p { line-height: 1.5; margin-top: 5px;}
+  .close-btn {
+    position: absolute; top: 15px; right: 20px; font-size: 28px;
+    font-weight: bold; cursor: pointer; color: #999; line-height: 1;
+  }
+  .close-btn:hover { color: #000; }
+
+  /* App Wrapper - Safely centers it on your screen */
+  #app-wrapper {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  /* THE DOCUMENT CONTAINER */
+  #quote-document {
+    width: 7.7in;
+    max-width: 100%;
+    background-color: #fff;
+    padding: 30px; 
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+  }
+
+  /* Universal PDF Protections */
+  .avoid-break { page-break-inside: avoid !important; }
+
+  /* --- RESTORED STRICT HTML TABLE LAYOUT --- 
+     Guarantees repeating headers on new pages and locks column widths perfectly */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  td { vertical-align: top; word-wrap: break-word; }
+  .bold { font-weight: bold; }
+  
+  /* STRICT ALIGNMENT CLASSES */
+  .text-left { text-align: left !important; }
+  .text-center { text-align: center !important; }
+  .text-right { text-align: right !important; }
+  
+  /* Header Section */
+  .quote-title { font-size: 22px; font-weight: bold; margin-bottom: 5px; }
+  .quote-number { border: 1px solid #000; padding: 5px 30px; font-size: 16px; font-weight: bold; display: inline-block; min-width: 100px; }
+  
+  /* Address Section */
+  .address-box { border: 1px solid #000; padding: 8px 10px; min-height: 90px; width: 100%; }
+  .ref-text { margin-top: 15px; }
+
+  /* Meta Details Table */
+  .meta-table { table-layout: fixed; width: 100%; margin-bottom: 5px; }
+  .meta-table th { font-weight: bold; text-align: center; padding-bottom: 5px; font-size: 11px; white-space: normal; }
+  .meta-table td { text-align: center; padding: 0 2px; overflow: hidden; }
+
+  /* Line Items Table */
+  .lines-table { table-layout: fixed; width: 100%; margin-top: 10px; border-collapse: collapse; }
+  .lines-table thead { display: table-header-group; } 
+  .lines-table th { border-bottom: 2px solid #000; padding: 6px 4px; font-weight: bold; }
+  .lines-table td { padding: 6px 4px; border-bottom: 1px solid #eee; vertical-align: middle; }
+  .lines-table tr { page-break-inside: avoid !important; }
+  
+  /* Exact Column Widths Totaling exactly 100% */
+  .col-sort  { width: 6%; }
+  .col-line  { width: 5%; }
+  .col-item  { width: 18%; }
+  .col-desc  { width: 34%; } 
+  .col-qty   { width: 8%; }
+  .col-um    { width: 8%; }
+  .col-price { width: 11%; }
+  .col-total { width: 10%; }
+
+  /* Interactive UI Adjustments */
+  td[contenteditable="true"]:hover, div[contenteditable="true"]:hover { background-color: #f0f8ff; cursor: text; outline: 1px dashed #ccc; }
+  [contenteditable="false"] { cursor: default; }
+  
+  /* --- FADED PLACEHOLDER INSTRUCTIONS --- */
+  [contenteditable="true"]:empty:before {
+    content: attr(data-placeholder);
+    color: #999;
+    font-style: italic;
+    pointer-events: none;
+    display: inline-block;
+  }
+  [contenteditable="true"]:empty { min-width: 30px; min-height: 1.2em; }
+  .address-box:empty { display: block; min-height: 90px; }
+
+  select.editable-select, input.date-input {
+    font-family: Arial, sans-serif; font-size: 12px; border: 1px solid transparent;
+    padding: 2px; background-color: transparent; cursor: pointer; color: #000;
+    width: 100%; min-width: 0; text-overflow: ellipsis;
+  }
+  select.editable-select:hover, input.date-input:hover { border: 1px dashed #ccc; background-color: #f0f8ff; }
+  select.editable-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+  
+  .action-btn { background: #e0e0e0; border: 1px solid #ccc; cursor: pointer; padding: 2px 5px; font-size: 10px; margin-right: 2px; border-radius: 3px; }
+  .action-btn:hover { background: #d0d0d0; }
+  .action-btn.del { background: #ffe0e0; color: #a00; border-color: #ffcccc; }
+  .action-btn.del:hover { background: #ffc0c0; }
+
+  /* Unified Custom Notes */
+  .custom-header-note { border: 1px dashed transparent; min-height: 20px; margin: 15px 0; padding: 5px; }
+  .custom-header-note:hover { border-color: #ccc; background-color: #f9f9f9; }
+  .custom-header-note div { margin: 4px 0; }
+  
+  .footer-notes { margin-top: 30px; padding: 5px; border: 1px dashed transparent; }
+  .footer-notes:hover { border-color: #ccc; background-color: #f9f9f9; }
+  .footer-notes div { margin: 4px 0; }
+  
+  .logo-placeholder {
+    height: 32px; width: auto; max-width: 180px; border: 2px dashed #0044cc; color: #0044cc;
+    display: flex; align-items: center; justify-content: center; font-size: 11px;
+    font-weight: bold; cursor: pointer; margin-bottom: 5px; background: #e6f0ff;
+  }
+
+  /* --- STRICT PDF EXPORT MODE --- */
+  body.pdf-exporting {
+    background-color: #fff !important;
+  }
+  body.pdf-exporting #app-wrapper {
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    min-height: 0 !important; /* Destroys Blank Pages */
+  }
+  body.pdf-exporting #quote-document {
+    width: 7.7in !important;
+    max-width: 7.7in !important;
+    margin: 0 !important;
+    padding: 0 !important; 
+    box-shadow: none !important;
+    border: none !important;
+  }
+</style>
+</head>
+<body>
+
+  <!-- Top Web App Control Bar -->
+  <div class="control-panel no-print" id="control-bar">
+    <button class="control-btn import" onclick="document.getElementById('verax-upload').click()" id="importBtn">&#11015; Import Verax PDF</button>
+    <input type="file" id="verax-upload" class="no-print" accept="application/pdf" style="display: none;">
+    
+    <button class="control-btn" onclick="addLineItem()">+ Add Line</button>
+    <button class="control-btn clear" onclick="clearForm()">&#8634; Clear Form</button>
+    <button class="control-btn undo-redo" onclick="undoAction()">&#10554; Undo</button>
+    <button class="control-btn undo-redo" onclick="redoAction()">&#10555; Redo</button>
+    <button class="control-btn save" onclick="saveDraft()">&#128190; Save Draft</button>
+    <button class="control-btn load" onclick="loadDraft()">&#128193; Load Draft</button>
+    <button class="control-btn export" onclick="exportToPDF()" id="exportBtn">&#11123; Download PDF</button>
+    <button class="control-btn help" onclick="toggleHelp()">&#10067; Help</button>
+  </div>
+
+  <!-- Help / Tutorial Modal -->
+  <div id="help-modal" class="no-print">
+    <div class="help-content">
+      <span class="close-btn" onclick="toggleHelp()">&times;</span>
+      <h2>Tarus Quote Generator Guide</h2>
+      <p>This tool allows you to easily import data from Verax, customize line items, and generate flawless PDFs.</p>
+      
+      <h3>&#11015; Import Verax PDF</h3>
+      <ul>
+        <li>Use this to pull data from a quote you previously exported from Verax.</li>
+        <li>It automatically maps the <b>Quote #, Addresses, Ref Info, Meta Data, and ALL Line Items</b> cleanly.</li>
+        <li><i>Note:</i> The browser will automatically open your default folder (usually "Downloads") to select your recently downloaded Verax file.</li>
+      </ul>
+
+      <h3>&#10554; Undo / &#10555; Redo Memory</h3>
+      <ul>
+        <li>The application constantly tracks your edits. If you accidentally delete a line, edit the wrong price, or wipe the form by mistake, simply hit <b>Undo</b> to revert the document exactly as it was.</li>
+      </ul>
+
+      <h3>+ Add Line & Table Controls</h3>
+      <ul>
+        <li>Click <b>+ Add Line</b> to manually add a new row to the parts table.</li>
+        <li>Use the <b>&uarr;</b> and <b>&darr;</b> buttons on the left to reorder lines.</li>
+        <li>Use the red <b>&times;</b> button to delete a line entirely.</li>
+        <li>The Line Totals and Grand Total will automatically calculate as you type the Qty and Price.</li>
+      </ul>
+
+      <h3>&#128190; Save / Load Draft</h3>
+      <ul>
+        <li>If you get interrupted, click <b>Save Draft</b>. This saves your exact current progress directly into your browser's local memory.</li>
+        <li>If you accidentally close the tab, just reopen the tool and click <b>Load Draft</b> to instantly restore your work.</li>
+      </ul>
+
+      <h3>Faded Watermarks & Empty Notes</h3>
+      <ul>
+        <li>Any field showing faded, grey italic text (e.g. <i>"Enter Description..."</i>) is a placeholder. <b>These placeholders will NOT appear on the final downloaded PDF.</b></li>
+        <li>If you leave the "Custom Notes" area blank, the PDF generator will automatically delete that space so you don't end up with massive empty white gaps.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div id="app-wrapper">
+    <div id="quote-document">
+      
+      <div class="avoid-break">
+        <!-- Header -->
+        <table>
+          <tr>
+            <td style="width: 33%;">
+              <!-- GITHUB DEFAULT LOGO -->
+              <input type="file" id="logo-upload" class="no-print" accept="image/png, image/jpeg" style="display: none;">
+              <!-- Crossorigin removed to prevent local file:// crashes -->
+              <img src="Tarus Quote Logo.jpg" id="logo-img" alt="TARUS Logo" style="height: 32px; width: auto; margin-bottom: 5px; display: block; cursor: pointer;" onerror="this.style.display='none'; document.getElementById('logo-prompt').style.display='flex';">
+              <div class="logo-placeholder no-print" id="logo-prompt" style="display: none;" onclick="document.getElementById('logo-upload').click()">CLICK TO ADD LOGO</div>
+              
+              <div id="tarus-address" contenteditable="true" data-placeholder="Company Address...">38100 Commerce Drive<br>Sterling Heights MI 48312<br>+1 586-977-1400<br>+1 586-977-3294<br>tarus.com</div>
+            </td>
+            <td style="width: 34%;" class="text-center">
+              <div class="quote-title">Quotation</div>
+              <div class="quote-number" contenteditable="true" data-placeholder="Enter Quote #"></div>
+            </td>
+            <td style="width: 33%;" class="text-right">
+              <div class="bold" id="rep-name" contenteditable="true" data-placeholder="Sales Rep Name">Chris Morton</div>
+              <div id="rep-contact" contenteditable="true" data-placeholder="Contact Info...">+1 586-977-1400<br>+1 586-977-0741<br>&#9993; sales@tarus.com</div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Addresses -->
+        <table style="margin-bottom: 5px;">
+          <tr>
+            <td style="width: 48%;">
+              <div class="bold">TO</div>
+              <div id="to-address" class="address-box" contenteditable="true" data-placeholder="Enter Customer Name & Address here..."></div>
+              <div id="ref-text" class="ref-text" contenteditable="true" data-placeholder="Enter Ref/SN details here..."></div>
+            </td>
+            <td style="width: 4%;"></td>
+            <td style="width: 48%;">
+              <div class="bold">SHIP TO</div>
+              <div id="ship-to-address" class="address-box" contenteditable="true" data-placeholder="Enter Shipping Address here..."></div>
+            </td>
+          </tr>
+        </table>
+
+        <br>
+
+        <!-- Meta Details -->
+        <table class="meta-table">
+          <colgroup>
+            <col style="width: 12%;">
+            <col style="width: 16%;">
+            <col style="width: 16%;">
+            <col style="width: 10%;">
+            <col style="width: 18%;">
+            <col style="width: 16%;">
+            <col style="width: 12%;">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="text-center">Date</th>
+              <th class="text-center">Inquiry Reference</th>
+              <th class="text-center">Delivery Promise</th>
+              <th class="text-center">FOB</th>
+              <th class="text-center">Ship Via</th>
+              <th class="text-center">Terms</th>
+              <th class="text-center">Expiration</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-center"><input type="date" class="date-input" id="meta-date"></td>
+              <td id="inquiry-ref" class="text-center" contenteditable="true" data-placeholder="Ref..."></td>
+              <td id="delivery-promise" class="text-center" contenteditable="true" data-placeholder="Time..."></td>
+              <td id="fob-point" class="text-center" contenteditable="true" data-placeholder="FOB..."></td>
+              <td class="text-center">
+                <select class="editable-select" id="ship-via">
+                  <option>BEST WAY</option>
+                  <option>CCX CONWAY</option>
+                  <option>COMMON CARRIER</option>
+                  <option>DHL</option>
+                  <option>FEDEX</option>
+                  <option>OUR TRUCK</option>
+                  <option>TARUS SERVICE</option>
+                  <option>UPS 2ND (BLUE)</option>
+                  <option>UPS 3D (ORANGE)</option>
+                  <option>UPS COLLECT-RED</option>
+                  <option>UPS EARLY AM</option>
+                  <option selected>UPS GROUND</option>
+                  <option>UPS Ground TP Acct 417092</option>
+                  <option>UPS RED</option>
+                  <option>UPS SATURDAY</option>
+                  <option>VENDOR DELY</option>
+                  <option>WILL CALL</option>
+                  <option>YELLOW FREIGHT</option>
+                </select>
+              </td>
+              <td class="text-center">
+                <select class="editable-select" id="terms">
+                  <option>.5%10,N30</option>
+                  <option>1% 10, N30</option>
+                  <option>1% 15, N30</option>
+                  <option>10 Net 10</option>
+                  <option>10% deposit, 90% upon ship</option>
+                  <option>100% Prepayment (Custom Order)</option>
+                  <option>100% Prepayment (Prior to Shipping)</option>
+                  <option>2% 10, N30</option>
+                  <option>2% 15, N30</option>
+                  <option>20% down payment 80% Net 30</option>
+                  <option>30% Down - 60% Prior to Ship - 10% After Install</option>
+                  <option>30% due upon order - 70% due Net 30</option>
+                  <option>30% due upon order - 70% due upon completion</option>
+                  <option>50% deposit, 40% upon ship, 10% upon install</option>
+                  <option>50% PO & 50% before delivery</option>
+                  <option>50% PO & 50% N30</option>
+                  <option>60% deposit, 30% upon ship, 10% upon receipt</option>
+                  <option>C.O.D.</option>
+                  <option>Consign</option>
+                  <option>Cred Card</option>
+                  <option>Due Recpt</option>
+                  <option>Mastercard</option>
+                  <option>Net 10</option>
+                  <option>Net 15</option>
+                  <option>Net 20</option>
+                  <option selected>Net 30</option>
+                  <option>Net 45</option>
+                  <option>Net 60</option>
+                  <option>Net 75</option>
+                  <option>Net 90</option>
+                  <option>No Charge</option>
+                  <option>Other</option>
+                  <option>Warranty</option>
+                  <option>Wire Trans</option>
+                </select>
+              </td>
+              <td class="text-center"><input type="date" class="date-input" id="meta-exp"></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Custom Header Notes -->
+        <div class="custom-header-note" contenteditable="true" data-placeholder="[Click here to add custom Header notes...]"></div>
+      </div> 
+
+      <!-- STRICT HTML TABLE LINE ITEMS -->
+      <table class="lines-table" id="lines-table-container">
+        <thead>
+          <tr>
+            <th class="col-sort text-center no-print">Sort</th>
+            <th class="col-line text-center">Line</th>
+            <th class="col-item text-left">Item</th>
+            <th class="col-desc text-left">Description</th>
+            <th class="col-qty text-center">Quantity</th>
+            <th class="col-um text-center">UM</th>
+            <th class="col-price text-right">Unit Price</th>
+            <th class="col-total text-right">Total</th>
+          </tr>
+        </thead>
+        <tbody id="line-items">
+          <!-- Will be auto-populated on load -->
+        </tbody>
+      </table>
+
+      <div class="avoid-break" style="display: flex; justify-content: flex-end; align-items: center; margin-top: 15px; padding-right: 5px;">
+        <div style="font-weight: bold; font-size: 14px; margin-right: 30px;">Total USD</div>
+        <div style="font-weight: bold; font-size: 14px; width: 100px; text-align: right;" id="grand-total">$0.00</div>
+      </div>
+
+      <!-- MERGED FINAL FOOTER -->
+      <div class="avoid-break">
+        <div class="footer-notes" contenteditable="true" id="footer-notes" data-placeholder="[Click here to add custom Footer notes...]">
+          <div>Please send your Purchase Order to service@tarus.com.</div>
+          <div>* Delivery times are an estimation only and cannot be guaranteed.</div>
+          <div>** Shipping will be prepaid and added to the invoice.</div>
+          <div>*** If paying with Credit Card an additional 3.5% will be added to the invoice.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // --- STATE MANAGEMENT (UNDO / REDO ENGINE) ---
+    let undoStack = [];
+    let redoStack = [];
+    let isRestoring = false; 
+    let typingTimer;
+
+    function captureState() {
+        if(isRestoring) return;
+        const state = {
+            quoteNum: document.querySelector('.quote-number').innerText,
+            repName: document.getElementById('rep-name').innerText,
+            repContact: document.getElementById('rep-contact').innerHTML,
+            tarusAddress: document.getElementById('tarus-address').innerHTML,
+            toAddress: document.getElementById('to-address').innerHTML,
+            shipToAddress: document.getElementById('ship-to-address').innerHTML,
+            refText: document.getElementById('ref-text').innerHTML,
+            inquiryRef: document.getElementById('inquiry-ref').innerText,
+            deliveryPromise: document.getElementById('delivery-promise').innerText,
+            fobPoint: document.getElementById('fob-point').innerText,
+            headerNote: document.querySelector('.custom-header-note').innerHTML,
+            footerNotes: document.getElementById('footer-notes').innerHTML,
+            lineItems: document.getElementById('line-items').innerHTML,
+            date: document.getElementById('meta-date').value,
+            exp: document.getElementById('meta-exp').value,
+            shipVia: document.getElementById('ship-via').value,
+            terms: document.getElementById('terms').value
+        };
+        undoStack.push(state);
+        if(undoStack.length > 50) undoStack.shift(); 
+        redoStack = []; 
+    }
+
+    function applyState(data) {
+        isRestoring = true;
+        if(data.quoteNum !== undefined) document.querySelector('.quote-number').innerText = data.quoteNum;
+        if(data.repName !== undefined) document.getElementById('rep-name').innerText = data.repName;
+        if(data.repContact !== undefined) document.getElementById('rep-contact').innerHTML = data.repContact;
+        if(data.tarusAddress !== undefined) document.getElementById('tarus-address').innerHTML = data.tarusAddress;
+        if(data.toAddress !== undefined) document.getElementById('to-address').innerHTML = data.toAddress;
+        if(data.shipToAddress !== undefined) document.getElementById('ship-to-address').innerHTML = data.shipToAddress;
+        if(data.refText !== undefined) document.getElementById('ref-text').innerHTML = data.refText;
+        if(data.inquiryRef !== undefined) document.getElementById('inquiry-ref').innerText = data.inquiryRef;
+        if(data.deliveryPromise !== undefined) document.getElementById('delivery-promise').innerText = data.deliveryPromise;
+        if(data.fobPoint !== undefined) document.getElementById('fob-point').innerText = data.fobPoint;
+        if(data.headerNote !== undefined) document.querySelector('.custom-header-note').innerHTML = data.headerNote;
+        if(data.footerNotes !== undefined) document.getElementById('footer-notes').innerHTML = data.footerNotes;
+        if(data.lineItems !== undefined) document.getElementById('line-items').innerHTML = data.lineItems;
+        if(data.date) document.getElementById('meta-date').value = data.date;
+        if(data.exp) document.getElementById('meta-exp').value = data.exp;
+        if(data.shipVia) document.getElementById('ship-via').value = data.shipVia;
+        if(data.terms) document.getElementById('terms').value = data.terms;
+        
+        calculateTotals();
+        isRestoring = false;
+    }
+
+    function undoAction() {
+        if(undoStack.length > 1) {
+            let currentState = undoStack.pop();
+            redoStack.push(currentState);
+            let previousState = undoStack[undoStack.length - 1];
+            applyState(previousState);
+        }
+    }
+
+    function redoAction() {
+        if(redoStack.length > 0) {
+            let nextState = redoStack.pop();
+            undoStack.push(nextState);
+            applyState(nextState);
+        }
+    }
+
+    document.getElementById('quote-document').addEventListener('input', function(e) {
+        if(e.target.isContentEditable || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(captureState, 1000); 
+        }
+    });
+
+    document.getElementById('quote-document').addEventListener('change', function(e) {
+        if(e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') { captureState(); }
+    });
+
+    // --- INITIALIZATION ---
+    document.addEventListener("DOMContentLoaded", () => {
+        const today = new Date().toISOString().split('T')[0];
+        document.querySelectorAll('input[type="date"]').forEach(el => {
+            if(!el.value) el.value = today;
+        });
+        
+        if(document.getElementById('line-items').children.length === 0) { addLineItem(); }
+        captureState(); 
+    });
+
+    // --- HELP MODAL LOGIC ---
+    function toggleHelp() {
+        const modal = document.getElementById('help-modal');
+        modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+    }
+    
+    window.onclick = function(event) {
+        const modal = document.getElementById('help-modal');
+        if (event.target === modal) modal.style.display = "none";
+    }
+
+    // --- LOGO MANAGER ---
+    const logoImg = document.getElementById('logo-img');
+    const logoPrompt = document.getElementById('logo-prompt');
+    const logoUpload = document.getElementById('logo-upload');
+    const savedLogo = localStorage.getItem('tarusQuoteLogoBase64');
+    if (savedLogo && savedLogo.startsWith('data:image')) {
+      logoImg.src = savedLogo;
+      logoImg.style.display = 'block';
+      logoPrompt.style.display = 'none';
+    }
+
+    logoImg.addEventListener('click', () => { logoUpload.click(); });
+    logoUpload.addEventListener('change', function() {
+      const file = this.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          logoImg.src = e.target.result;
+          logoImg.style.display = 'block';
+          logoPrompt.style.display = 'none';
+          localStorage.setItem('tarusQuoteLogoBase64', e.target.result);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // --- ADVANCED STRICT-BUCKET VERAX IMPORTER ---
+    document.getElementById('verax-upload').addEventListener('change', async function(e) {
+        const file = e.target.files[0];
+        if(!file) return;
+
+        const btn = document.getElementById('importBtn');
+        const originalText = btn.innerHTML;
+        btn.innerText = "Scanning Verax Data...";
+
+        // ANTI-LOOP FILTER: Prevents engine from re-importing placeholder watermarks
+        const ignoreTexts = [
+            "Enter Description...", "Part #", "Qty", "UM", "Price", 
+            "Enter Quote #", "Enter Customer Name & Address here...", "Enter Shipping Address here..."
+        ];
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+            const numPages = pdf.numPages;
+            
+            let allItems = [];
+
+            // Extract all raw text elements with X/Y coordinates
+            for(let pageNum = 1; pageNum <= numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const textContent = await page.getTextContent();
+                
+                let rawItems = textContent.items.map(item => ({
+                    text: item.str,
+                    x: Math.round(item.transform[4]),
+                    y: Math.round(item.transform[5]), 
+                    width: Math.round(item.width),
+                    page: pageNum
+                })).filter(i => i.text.trim().length > 0 && !ignoreTexts.includes(i.text.trim()));
+
+                rawItems.sort((a,b) => b.y - a.y || a.x - b.x);
+                let rows = [];
+                let curRow = [];
+                let lastY = null;
+                rawItems.forEach(i => {
+                    if (lastY === null || Math.abs(lastY - i.y) > 5) {
+                        if(curRow.length) rows.push(curRow);
+                        curRow = [i];
+                        lastY = i.y;
+                    } else {
+                        curRow.push(i);
+                    }
+                });
+                if(curRow.length) rows.push(curRow);
+
+                // PRE-MERGE: Stitch adjacent fragments (like "$" and "432.") together securely
+                rows.forEach(row => {
+                    row.sort((a,b) => a.x - b.x);
+                    let mergedRow = [];
+                    let currentItem = null;
+                    row.forEach(r => {
+                        if (!currentItem) {
+                            currentItem = Object.assign({}, r);
+                        } else {
+                            let gap = r.x - (currentItem.x + currentItem.width);
+                            if (gap < 12) { 
+                                currentItem.text += (gap > 3 ? ' ' : '') + r.text; 
+                                currentItem.width = (r.x + r.width) - currentItem.x;
+                            } else {
+                                mergedRow.push(currentItem);
+                                currentItem = Object.assign({}, r);
+                            }
+                        }
+                    });
+                    if(currentItem) mergedRow.push(currentItem);
+                    allItems.push(...mergedRow);
+                });
+            }
+
+            // 1. Extract Quote Number
+            const page1Items = allItems.filter(i => i.page === 1);
+            const quoteLabel = page1Items.find(i => i.text.toUpperCase() === 'QUOTATION');
+            if (quoteLabel) {
+                const qNum = page1Items.find(i => /^\d{4,6}$/.test(i.text) && Math.abs(i.x - quoteLabel.x) < 50 && i.y < quoteLabel.y);
+                if (qNum) document.querySelector('.quote-number').innerText = qNum.text;
+            }
+
+            // 2. Map Addresses cleanly using Regex Boundaries to eliminate TO/SHIP TO misses
+            const toLabel = page1Items.find(i => i.text.match(/\bTO\b/));
+            const dateLabel = page1Items.find(i => i.text.match(/\bDate\b/));
+            const refLabel = page1Items.find(i => i.text.match(/\bRef/i));
+            
+            let addressTopY = toLabel ? toLabel.y + 10 : 800;
+            let addressBottomY = refLabel ? refLabel.y : (dateLabel ? dateLabel.y + 20 : 0);
+
+            let toLines = [];
+            let shipLines = [];
+
+            // Ignore Rep Information blocks from being sucked into Address boxes
+            const isRepInfo = (txt) => {
+                return txt.includes('Quotation') || /^\d{4,6}$/.test(txt) || txt.includes('Chris Morton') || 
+                       txt.includes('sales@tarus.com') || txt.includes('586-977');
+            };
+
+            page1Items.forEach(i => {
+                if (i.y <= addressTopY && i.y > addressBottomY + 5) {
+                    let cleanText = i.text.replace(/\bSHIP TO\b/g, '').replace(/\bTO\b/g, '').trim();
+                    if (cleanText.length > 0 && !isRepInfo(cleanText)) {
+                        if (i.x < 250) toLines.push({ ...i, text: cleanText });
+                        if (i.x >= 250) shipLines.push({ ...i, text: cleanText });
+                    }
+                }
+            });
+            
+            const groupAddress = (items) => {
+                let lines = [];
+                let curLine = [];
+                let lastY = null;
+                items.sort((a,b) => b.y - a.y || a.x - b.x).forEach(i => {
+                    if (lastY === null || Math.abs(lastY - i.y) > 6) {
+                        if(curLine.length) lines.push(curLine.map(c=>c.text).join(' '));
+                        curLine = [i];
+                        lastY = i.y;
+                    } else {
+                        curLine.push(i);
+                    }
+                });
+                if(curLine.length) lines.push(curLine.map(c=>c.text).join(' '));
+                return lines.join('<br>');
+            };
+
+            document.getElementById('to-address').innerHTML = groupAddress(toLines);
+            document.getElementById('ship-to-address').innerHTML = groupAddress(shipLines);
+            if(refLabel) { document.getElementById('ref-text').innerText = refLabel.text; }
+
+            // 3. Map Meta Data Elements by Strict Column X-Coordinates
+            if (dateLabel) {
+                const metaValues = page1Items.filter(i => i.y < dateLabel.y - 5 && i.y > dateLabel.y - 50);
+                let metaMap = { date: '', inq: '', del: '', fob: '', ship: '', terms: '', exp: '' };
+                
+                metaValues.forEach(i => {
+                    let x = i.x;
+                    if(x < 100) metaMap.date += i.text + ' ';
+                    else if(x >= 100 && x < 210) metaMap.inq += i.text + ' ';
+                    else if(x >= 210 && x < 325) metaMap.del += i.text + ' ';
+                    else if(x >= 325 && x < 390) metaMap.fob += i.text + ' ';
+                    else if(x >= 390 && x < 480) metaMap.ship += i.text + ' ';
+                    else if(x >= 480 && x < 550) metaMap.terms += i.text + ' ';
+                    else metaMap.exp += i.text + ' ';
+                });
+
+                const formatDate = (str) => {
+                    if(!str) return '';
+                    const match = str.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+                    if (match) return `${match[3]}-${match[1].padStart(2,'0')}-${match[2].padStart(2,'0')}`;
+                    return '';
+                };
+
+                const setSelect = (id, txt) => {
+                    if(!txt) return;
+                    const sel = document.getElementById(id);
+                    for(let j=0; j<sel.options.length; j++) {
+                        if(sel.options[j].text.toUpperCase().includes(txt.trim().toUpperCase())) { sel.selectedIndex = j; return; }
+                    }
+                };
+
+                document.getElementById('meta-date').value = formatDate(metaMap.date);
+                document.getElementById('inquiry-ref').innerText = metaMap.inq.trim();
+                document.getElementById('delivery-promise').innerText = metaMap.del.trim();
+                document.getElementById('fob-point').innerText = metaMap.fob.trim();
+                setSelect('ship-via', metaMap.ship);
+                setSelect('terms', metaMap.terms);
+                document.getElementById('meta-exp').value = formatDate(metaMap.exp);
+            }
+
+            // 4. Capture Custom Header Notes
+            const lineLabel = page1Items.find(i => i.text === 'Line' || i.text === 'Line Item' || i.text === 'Item');
+            if (dateLabel && lineLabel) {
+                const headerNotes = page1Items.filter(i => i.y < dateLabel.y - 45 && i.y > lineLabel.y + 15);
+                if (headerNotes.length > 0) {
+                    let hnText = headerNotes.sort((a,b) => b.y - a.y || a.x - b.x).map(i => i.text).join(' ');
+                    if(!hnText.includes('Click here to add custom')) {
+                        document.querySelector('.custom-header-note').innerText = hnText;
+                    }
+                }
+            }
+
+            // 5. Advanced Spatial Line Item Extractor
+            let parsedLineItems = [];
+            
+            for(let pageNum = 1; pageNum <= numPages; pageNum++) {
+                const pItems = allItems.filter(i => i.page === pageNum);
+                
+                const pLineLabel = pItems.find(i => i.text === 'Line' || i.text === 'Line Item' || i.text === 'Item');
+                const totalLabel = pItems.find(i => i.text.includes('Total USD'));
+                const footerLabel = pItems.find(i => i.text.includes('Please send your Purchase'));
+                
+                let topLimit = 800;
+                if (pLineLabel) topLimit = pLineLabel.y - 5;
+                else if (pageNum > 1) topLimit = 750;
+
+                let bottomLimit = 40;
+                if (totalLabel) bottomLimit = Math.max(bottomLimit, totalLabel.y);
+                if (footerLabel) bottomLimit = Math.max(bottomLimit, footerLabel.y);
+
+                const lineDataItems = pItems.filter(i => i.y < topLimit && i.y > bottomLimit + 10);
+                
+                lineDataItems.sort((a,b) => b.y - a.y);
+                
+                let itemRows = [];
+                let curRow = [];
+                let rowAnchorY = null;
+                
+                lineDataItems.forEach(i => {
+                    if (rowAnchorY === null || Math.abs(rowAnchorY - i.y) > 8) {
+                        if(curRow.length) {
+                            curRow.sort((a,b) => a.x - b.x);
+                            itemRows.push(curRow);
+                        }
+                        curRow = [i];
+                        rowAnchorY = i.y;
+                    } else {
+                        curRow.push(i);
+                    }
+                });
+                if(curRow.length) {
+                    curRow.sort((a,b) => a.x - b.x);
+                    itemRows.push(curRow);
+                }
+
+                let currentLineItem = null;
+
+                itemRows.forEach(row => {
+                    let firstItem = row[0];
+                    let isNewLine = (firstItem && firstItem.x < 55 && /^\d+$/.test(firstItem.text.trim()));
+
+                    if (isNewLine) {
+                        currentLineItem = { line: '', item: '', desc: '', rightStr: '' };
+                        parsedLineItems.push(currentLineItem);
+                    }
+
+                    if (currentLineItem) {
+                        // Strict Spatial Coordinate Bucketing to place Item vs Desc flawlessly
+                        row.forEach(r => {
+                            let x = r.x;
+                            if (x < 55) {
+                                if(isNewLine) currentLineItem.line += r.text + ' ';
+                            }
+                            else if (x >= 55 && x < 150) currentLineItem.item += r.text + ' ';
+                            else if (x >= 150 && x < 350) currentLineItem.desc += r.text + ' ';
+                            else {
+                                currentLineItem.rightStr += r.text + ' ';
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Populate Line Items to the HTML Table
+            const tbody = document.getElementById('line-items');
+            tbody.innerHTML = '';
+            
+            if(parsedLineItems.length > 0) {
+                parsedLineItems.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'avoid-break'; 
+                    
+                    // Regex Math Cleaner: Magnetically stitches numbers and extracts quantities accurately
+                    let rs = item.rightStr || "";
+                    rs = rs.replace(/\s+\.\s+/g, '.').replace(/\s+,\s+/g, ','); // Close gaps around punctuation
+                    rs = rs.replace(/\$\s+/g, '$'); // Attach floating $ signs
+                    let prevRs;
+                    do {
+                        prevRs = rs;
+                        rs = rs.replace(/(\d)\s+(\d)/g, '$1$2'); // Collapse spaces between digits
+                    } while (rs !== prevRs);
+
+                    let umMatch = rs.match(/\b(EA|UM|SET|LOT|PC)\b/i);
+                    let finalUM = umMatch ? umMatch[1].toUpperCase() : "EA";
+
+                    let finalQty = "1";
+                    let qtyMatch = rs.match(/(\d+(?:\.\d+)?)\s*(?:EA|UM|SET|LOT|PC)/i);
+                    if(qtyMatch) {
+                        finalQty = parseFloat(qtyMatch[1]).toString(); // Converts 12.000000 cleanly to 12
+                    } else {
+                        let fallback = rs.match(/(?<!\$)\b(\d+(?:\.\d+)?)\b/);
+                        if(fallback) finalQty = parseFloat(fallback[1]).toString();
+                    }
+
+                    let prices = rs.match(/\$[\d,]+\.\d{2}/g);
+                    let formattedPrice = prices && prices.length > 0 ? prices[0] : "$0.00";
+                    let formattedTotal = prices && prices.length > 1 ? prices[1] : formattedPrice;
+
+                    tr.innerHTML = `
+                      <td class="col-sort text-center no-print">
+                        <button class="action-btn" onclick="moveUp(this)">↑</button><button class="action-btn" onclick="moveDown(this)">↓</button><button class="action-btn del" onclick="deleteRow(this)">✗</button>
+                      </td>
+                      <td class="col-line line-num text-center" contenteditable="true">${item.line.trim()}</td>
+                      <td class="col-item text-left" contenteditable="true" data-placeholder="Part #">${item.item.trim()}</td>
+                      <td class="col-desc text-left" contenteditable="true" data-placeholder="Enter Description...">${item.desc.trim()}</td>
+                      <td class="col-qty qty text-center" contenteditable="true" data-placeholder="Qty">${finalQty}</td>
+                      <td class="col-um text-center" contenteditable="true" data-placeholder="UM">${finalUM}</td>
+                      <td class="col-price price text-right" contenteditable="true" data-placeholder="Price">${formattedPrice}</td>
+                      <td class="col-total line-total text-right">${formattedTotal}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                addLineItem(); 
+            }
+
+            calculateTotals();
+            captureState(); 
+            alert("Success! Verax data has been imported.\n\nQuote details, addresses, and line items have been mapped perfectly.");
+
+        } catch(err) {
+            console.error(err);
+            alert("Error parsing Verax PDF. Please ensure you selected a valid PDF and try again.");
+        }
+
+        btn.innerHTML = originalText;
+        e.target.value = ''; 
+    });
+
+    // --- WEB APP TOOLS (Clear, Save, Load) ---
+    function clearForm() {
+      if(!confirm("Warning: This will wipe all customer info and parts to give you a blank quote. Continue?")) return;
+      
+      document.querySelector('.quote-number').innerText = '';
+      document.getElementById('to-address').innerText = '';
+      document.getElementById('ship-to-address').innerText = '';
+      document.getElementById('ref-text').innerText = '';
+      document.getElementById('inquiry-ref').innerText = '';
+      document.getElementById('delivery-promise').innerText = '';
+      document.getElementById('fob-point').innerText = '';
+      document.querySelector('.custom-header-note').innerText = '';
+      
+      const today = new Date().toISOString().split('T')[0];
+      document.querySelectorAll('.date-input').forEach(el => el.value = today);
+      document.querySelectorAll('.editable-select').forEach(el => el.selectedIndex = 0);
+
+      document.getElementById('line-items').innerHTML = '';
+      document.getElementById('grand-total').innerText = '$0.00';
+      addLineItem();
+      captureState();
+    }
+
+    function saveDraft() {
+      const state = undoStack[undoStack.length - 1]; 
+      if(state) {
+          localStorage.setItem('TarusQuote_Save', JSON.stringify(state));
+          alert("Draft saved! You can close your browser and hit 'Load Draft' next time you return.");
+      }
+    }
+
+    function loadDraft() {
+      const saved = localStorage.getItem('TarusQuote_Save');
+      if(!saved) { alert("No saved template found."); return; }
+      const data = JSON.parse(saved);
+      applyState(data);
+      captureState();
+    }
+
+    // Auto-calculate totals
+    function calculateTotals() {
+      let grandTotal = 0;
+      const rows = document.querySelectorAll('#line-items tr');
+      rows.forEach(row => {
+        const qtyCell = row.querySelector('.qty');
+        const priceCell = row.querySelector('.price');
+        const totalCell = row.querySelector('.line-total');
+        if (qtyCell && priceCell && totalCell) {
+          const qty = parseFloat(qtyCell.innerText.replace(/[^0-9.-]+/g, "")) || 0;
+          const price = parseFloat(priceCell.innerText.replace(/[^0-9.-]+/g, "")) || 0;
+          const lineTotal = qty * price;
+          totalCell.innerText = '$' + lineTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+          grandTotal += lineTotal;
+        }
+      });
+      document.getElementById('grand-total').innerText = '$' + grandTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    document.getElementById('line-items').addEventListener('input', calculateTotals);
+
+    function addLineItem() {
+      const tbody = document.getElementById('line-items');
+      const nextLineNum = tbody.children.length + 1;
+      const tr = document.createElement('tr');
+      tr.className = 'avoid-break'; // Locks the row from slicing
+      tr.innerHTML = `
+        <td class="col-sort text-center no-print">
+          <button class="action-btn" onclick="moveUp(this)">↑</button><button class="action-btn" onclick="moveDown(this)">↓</button><button class="action-btn del" onclick="deleteRow(this)">✗</button>
+        </td>
+        <td class="col-line line-num text-center" contenteditable="true">${nextLineNum}</td>
+        <td class="col-item text-left" contenteditable="true" data-placeholder="Part #"></td>
+        <td class="col-desc text-left" contenteditable="true" data-placeholder="Enter Description..."></td>
+        <td class="col-qty qty text-center" contenteditable="true" data-placeholder="Qty">1</td>
+        <td class="col-um text-center" contenteditable="true" data-placeholder="UM">EA</td>
+        <td class="col-price price text-right" contenteditable="true" data-placeholder="Price">$0.00</td>
+        <td class="col-total line-total text-right">$0.00</td>
+      `;
+      tbody.appendChild(tr);
+      renumberRows();
+      calculateTotals();
+      captureState();
+    }
+
+    function moveUp(btn) {
+      const row = btn.closest('tr');
+      if (row.previousElementSibling) { row.parentNode.insertBefore(row, row.previousElementSibling); renumberRows(); captureState(); }
+    }
+    function moveDown(btn) {
+      const row = btn.closest('tr');
+      if (row.nextElementSibling) { row.parentNode.insertBefore(row.nextElementSibling, row); renumberRows(); captureState(); }
+    }
+    function deleteRow(btn) {
+      btn.closest('tr').remove();
+      renumberRows();
+      calculateTotals();
+      captureState();
+    }
+    function renumberRows() {
+      document.querySelectorAll('#line-items tr').forEach((row, index) => {
+        row.querySelector('.line-num').innerText = index + 1;
+      });
+    }
+
+    // --- BULLETPROOF PDF EXPORT ENGINE (Optimized File Size & Geometry Locks) ---
+    function exportToPDF() {
+      const btn = document.getElementById('exportBtn');
+      const element = document.getElementById('quote-document');
+      const logoImg = document.getElementById('logo-img');
+      
+      const quoteNum = document.querySelector('.quote-number').innerText.trim() || 'Quote';
+      const filename = 'Tarus_Quote_' + quoteNum + ' - NEW.pdf'; 
+      const repName = document.getElementById('rep-name').innerText;
+      const now = new Date();
+      const dateString = now.toLocaleDateString('en-US') + ' ' + now.toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'});
+
+      btn.innerText = "Generating PDF...";
+      
+      // Force Scroll to 0,0 to fix the blank top-gap bug natively
+      window.scrollTo(0, 0);
+
+      const opt = {
+        margin:       [0.4, 0.4, 0.6, 0.4], 
+        filename:     filename,
+        image:        { type: 'jpeg', quality: 0.85 }, // Optimized to shrink file size drastically
+        html2canvas:  { 
+            scale: 1.5, 
+            useCORS: true,
+            scrollX: 0,
+            scrollY: 0, // Locks capture window to top
+            onclone: function (clonedDoc) {
+                const printArea = clonedDoc.getElementById('quote-document');
+                
+                // --- THE ULTIMATE ANCHOR LOCK & CRASH FIX ---
+                // Safely clears the wrapper to prevent the 100vh extra blank page bug
+                clonedDoc.body.innerHTML = '';
+                clonedDoc.body.appendChild(printArea);
+
+                clonedDoc.documentElement.style.minHeight = '0';
+                clonedDoc.documentElement.style.height = 'auto';
+                clonedDoc.body.style.minHeight = '0';
+                clonedDoc.body.style.height = 'auto';
+                clonedDoc.body.style.margin = '0';
+                clonedDoc.body.style.padding = '0';
+                clonedDoc.body.style.backgroundColor = '#fff';
+
+                printArea.style.margin = '0';
+                printArea.style.padding = '30px';
+                printArea.style.boxShadow = 'none';
+                printArea.style.width = '7.7in';
+                printArea.style.maxWidth = '7.7in';
+
+                // Securely hide placeholders during print without triggering html2canvas SyntaxError Crash
+                const style = clonedDoc.createElement('style');
+                style.innerHTML = `[contenteditable="true"]:empty:before { display: none !important; content: "" !important; }`;
+                clonedDoc.head.appendChild(style);
+
+                clonedDoc.querySelectorAll('.no-print').forEach(el => el.style.display = 'none');
+                clonedDoc.querySelectorAll('.col-sort').forEach(el => el.style.display = 'none');
+                clonedDoc.querySelectorAll('.col-desc').forEach(el => el.style.width = '40%'); 
+
+                const headerNote = clonedDoc.querySelector('.custom-header-note');
+                if(headerNote && headerNote.textContent.trim() === '') {
+                    headerNote.style.display = 'none';
+                    headerNote.style.margin = '0';
+                    headerNote.style.padding = '0';
+                }
+
+                clonedDoc.querySelectorAll('select.editable-select').forEach(sel => {
+                    const span = clonedDoc.createElement('span');
+                    span.innerText = sel.options[sel.selectedIndex].text;
+                    span.style.fontFamily = 'Arial, sans-serif';
+                    span.style.fontSize = '12px';
+                    span.style.display = 'inline-block';
+                    span.style.width = '100%';
+                    span.style.textAlign = 'center';
+                    sel.parentNode.insertBefore(span, sel);
+                    sel.remove();
+                });
+
+                clonedDoc.querySelectorAll('input.date-input').forEach(inp => {
+                    const span = clonedDoc.createElement('span');
+                    let displayDate = inp.value;
+                    if(displayDate && displayDate.includes('-')) {
+                        const parts = displayDate.split('-');
+                        displayDate = `${parts[1]}/${parts[2]}/${parts[0]}`; 
+                    }
+                    span.innerText = displayDate;
+                    span.style.fontFamily = 'Arial, sans-serif';
+                    span.style.fontSize = '12px';
+                    span.style.display = 'inline-block';
+                    span.style.width = '100%';
+                    span.style.textAlign = 'center';
+                    inp.parentNode.insertBefore(span, inp);
+                    inp.remove();
+                });
+            }
+        }, 
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'], avoid: ['tr', '.avoid-break'] }
+      };
+
+      // 150ms timeout ensures the window scrolls to top fully before the picture is taken
+      setTimeout(() => {
+          html2pdf().set(opt).from(element).toPdf().get('pdf').then(function (pdf) {
+            var totalPages = pdf.internal.getNumberOfPages();
+            for (var i = 1; i <= totalPages; i++) {
+              pdf.setPage(i);
+              pdf.setFontSize(8);
+              pdf.setTextColor(0, 0, 0);
+              
+              pdf.text('Page ' + i + ' of ' + totalPages, 0.4, pdf.internal.pageSize.getHeight() - 0.4);
+              pdf.text(dateString, 0.4, pdf.internal.pageSize.getHeight() - 0.25);
+              pdf.text('Sales Representative: ' + repName, pdf.internal.pageSize.getWidth() - 2.5, pdf.internal.pageSize.getHeight() - 0.4);
+            }
+          }).save().then(() => {
+            btn.innerHTML = "&#11123; Download PDF";
+          }).catch(err => {
+            console.error("PDF Export Error: ", err);
+            btn.innerHTML = "&#11123; Download PDF";
+            alert("An error occurred during PDF generation.");
+          });
+      }, 150);
+    }
+  </script>
+</body>
+</html>
